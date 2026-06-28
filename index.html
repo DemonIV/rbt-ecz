@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0e0e14">
+<title>EBOT Eczane Robotu — 3D Simülasyon</title>
+<style>
+  :root{
+    --bg:#0e0e14; --surface:#1b1b24; --surface2:#23232e; --surface3:#2a2a35;
+    --text:#eef0f4; --text2:#a8acb8; --muted:#71757f;
+    --border:#2e2e38; --accent:#e06a3a; --accent2:#f57a48;
+    --green:#27ab83; --red:#e0594a; --blue:#4a97e0;
+    --radius:12px;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent; -webkit-user-select:none; user-select:none;}
+  html,body{margin:0; padding:0; background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; overflow-x:hidden;}
+  .app{max-width:1100px; margin:0 auto; display:flex; flex-direction:column; min-height:100vh;}
+
+  header{padding:12px 14px 6px; display:flex; align-items:center; justify-content:space-between; gap:10px;}
+  header h1{font-size:15px; font-weight:600; margin:0;}
+  header .badge{font-size:11px; color:var(--text2); background:var(--surface); padding:4px 9px; border-radius:20px;}
+
+  /* 3D alan */
+  #wrap{position:relative; width:100%; height:48vh; min-height:300px;
+    background:linear-gradient(180deg,#20202c,#101018);
+    overflow:hidden; border-top:1px solid var(--border); border-bottom:1px solid var(--border);
+    touch-action:none;}
+  #wrap canvas{display:block; touch-action:none;}
+  #err{position:absolute; inset:0; display:none; align-items:center; justify-content:center;
+    color:var(--red); font-size:13px; padding:20px; text-align:center;}
+  #hint{position:absolute; left:10px; bottom:8px; font-size:10px; color:rgba(255,255,255,.4); pointer-events:none;}
+  .viewbtns{position:absolute; right:8px; top:8px; display:flex; flex-direction:column; gap:6px;}
+  .viewbtns button{background:rgba(30,30,40,.85); color:var(--text); border:1px solid var(--border);
+    border-radius:8px; padding:7px 10px; font-size:12px; font-weight:600; cursor:pointer;}
+  .viewbtns button:active{background:var(--accent);}
+
+  /* metrikler */
+  .metrics{display:grid; grid-template-columns:repeat(2,1fr); gap:7px; padding:10px 12px;}
+  @media(min-width:620px){.metrics{grid-template-columns:repeat(4,1fr);}}
+  .metric{background:var(--surface); border-radius:10px; padding:8px 11px;}
+  .metric .lbl{font-size:10.5px; color:var(--text2);}
+  .metric .val{font-size:17px; font-weight:600; margin-top:1px;}
+  .metric .val.big{color:var(--green);}
+
+  /* sekmeler */
+  .tabs{display:flex; gap:6px; padding:4px 12px 0;}
+  .tab{flex:1; text-align:center; padding:9px 6px; font-size:12.5px; font-weight:600;
+    color:var(--text2); background:var(--surface); border:1px solid var(--border);
+    border-bottom:none; border-radius:9px 9px 0 0; cursor:pointer;}
+  .tab.active{color:var(--text); background:var(--surface2); border-color:var(--accent);}
+
+  /* kontroller */
+  .panel{background:var(--surface2); border:1px solid var(--border); border-top:none;
+    margin:0 12px 12px; border-radius:0 0 11px 11px; padding:12px; display:none;}
+  .panel.active{display:block;}
+  .ctl{display:flex; align-items:center; gap:10px; padding:7px 0;}
+  .ctl label{font-size:12.5px; color:var(--text2); flex:0 0 42%;}
+  .ctl input[type=range]{flex:1; accent-color:var(--accent); height:30px; min-width:0;}
+  .ctl .num{font-size:12.5px; font-weight:600; flex:0 0 52px; text-align:right; color:var(--text);}
+  .ctl.warn .num{color:var(--red);}
+  .toggles{display:flex; gap:16px; flex-wrap:wrap; padding-top:8px; border-top:1px solid var(--border); margin-top:6px;}
+  .chk{display:flex; align-items:center; gap:7px; font-size:12.5px; color:var(--text2); cursor:pointer;}
+  .chk input{width:17px; height:17px; accent-color:var(--accent);}
+
+  .actions{display:flex; gap:8px; padding:0 12px 16px; flex-wrap:wrap;}
+  .actions button{flex:1; min-width:120px; background:var(--accent); color:#fff; border:none;
+    border-radius:9px; padding:12px; font-size:13.5px; font-weight:600; cursor:pointer;}
+  .actions button.sec{background:var(--surface3); color:var(--text);}
+  .actions button:active{opacity:.8;}
+
+  .note{font-size:11.5px; color:var(--muted); padding:0 14px 18px; line-height:1.5;}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>EBOT Eczane Robotu · 3D</h1>
+    <span class="badge" id="dim-badge">—</span>
+  </header>
+
+  <div id="wrap">
+    <div id="err"></div>
+    <div class="viewbtns">
+      <button id="btnSide">Yandan</button>
+      <button id="btnFront">Önden</button>
+      <button id="btnReset">Sıfırla</button>
+    </div>
+    <div id="hint">1 parmak: döndür · 2 parmak: zoom/kaydır</div>
+  </div>
+
+  <div class="metrics">
+    <div class="metric"><div class="lbl">Eğimli kat / kolon</div><div class="val" id="m-row">—</div></div>
+    <div class="metric"><div class="lbl">Kanal / kat</div><div class="val" id="m-chan">—</div></div>
+    <div class="metric"><div class="lbl">Toplam kanal</div><div class="val" id="m-tot">—</div></div>
+    <div class="metric"><div class="lbl">Toplam ilaç</div><div class="val big" id="m-box">—</div></div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" data-tab="kabin">Kabin</div>
+    <div class="tab" data-tab="pay">Paylar</div>
+    <div class="tab" data-tab="kanal">Kanal / İlaç</div>
+  </div>
+
+  <!-- KABİN -->
+  <div class="panel active" data-panel="kabin">
+    <div class="ctl"><label>Genişlik (m)</label><input type="range" id="pW" min="1.5" max="6" step="0.05" value="4.0"><span class="num" id="vW">4.00</span></div>
+    <div class="ctl"><label>Yükseklik (m)</label><input type="range" id="pH" min="1.2" max="3.2" step="0.05" value="2.5"><span class="num" id="vH">2.50</span></div>
+    <div class="ctl"><label>Derinlik (m)</label><input type="range" id="pD" min="0.4" max="2.0" step="0.05" value="1.25"><span class="num" id="vD">1.25</span></div>
+    <div class="ctl"><label>Kolon sayısı</label><input type="range" id="pCol" min="1" max="6" step="1" value="3"><span class="num" id="vCol">3</span></div>
+  </div>
+
+  <!-- PAYLAR -->
+  <div class="panel" data-panel="pay">
+    <div class="ctl"><label>Üst boşluk (cm)</label><input type="range" id="pTop" min="0" max="80" step="1" value="40"><span class="num" id="vTop">40</span></div>
+    <div class="ctl"><label>Alt boşluk (cm)</label><input type="range" id="pBot" min="0" max="80" step="1" value="25"><span class="num" id="vBot">25</span></div>
+    <div class="ctl"><label>Yan boşluk (cm)</label><input type="range" id="pSide" min="0" max="40" step="1" value="15"><span class="num" id="vSide">15</span></div>
+    <div class="ctl"><label>Üst kesme (cm)</label><input type="range" id="pCut" min="0" max="20" step="1" value="5"><span class="num" id="vCut">5</span></div>
+  </div>
+
+  <!-- KANAL / İLAÇ -->
+  <div class="panel" data-panel="kanal">
+    <div class="ctl"><label>Eğim (°)</label><input type="range" id="pTilt" min="5" max="35" step="0.5" value="27.5"><span class="num" id="vTilt">27.5</span></div>
+    <div class="ctl"><label>Kanal iç yük. (cm)</label><input type="range" id="pChH" min="3" max="14" step="0.5" value="6"><span class="num" id="vChH">6</span></div>
+    <div class="ctl"><label>Kanal eni (cm)</label><input type="range" id="pChW" min="3" max="12" step="0.5" value="5"><span class="num" id="vChW">5</span></div>
+    <div class="ctl"><label>İlaç boyu (cm)</label><input type="range" id="pMed" min="4" max="20" step="1" value="10"><span class="num" id="vMed">10</span></div>
+    <div class="toggles">
+      <label class="chk"><input type="checkbox" id="cBox" checked> İlaçları göster</label>
+      <label class="chk"><input type="checkbox" id="cWall" checked> Kanal ayraçları</label>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button id="btnRun">İlaç getir ▶</button>
+    <button class="sec" id="btnPreset">Varsayılana dön</button>
+  </div>
+
+  <div class="note" id="phys-note"></div>
+</div>
+
+<script src="three.min.js"></script>
+<script>
+(function(){
+  function fail(m){var e=document.getElementById('err');e.style.display='flex';e.textContent='Hata: '+m;}
+  try{
+  if(typeof THREE==='undefined'){fail('Three.js yüklenemedi.');return;}
+
+  // ---- parametre durumu ----
+  var P={ W:4.0,H:2.5,D:1.25,COL:3, TOP:0.40,BOT:0.25,SIDE:0.15,CUT:0.05,
+          tilt:27.5, chH:0.06, chW:0.05, med:0.10, box:true, wall:true };
+
+  var scene,camera,renderer,root,robot,robotHead;
+  var wrap=document.getElementById('wrap');
+
+  function build(){
+    scene=new THREE.Scene();
+    var cw=wrap.clientWidth||360, ch=wrap.clientHeight||320;
+    camera=new THREE.PerspectiveCamera(45,cw/ch,0.03,120);
+    renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});
+    renderer.setSize(cw,ch);renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+    renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+    wrap.appendChild(renderer.domElement);
+
+    scene.add(new THREE.HemisphereLight(0xdfe8ff,0x303038,1.0));
+    var key=new THREE.DirectionalLight(0xffffff,1.2);key.position.set(4,7,6);key.castShadow=true;
+    key.shadow.mapSize.set(2048,2048);
+    key.shadow.camera.left=-3.5;key.shadow.camera.right=3.5;key.shadow.camera.top=3.5;key.shadow.camera.bottom=-3.5;
+    key.shadow.camera.near=1;key.shadow.camera.far=26;key.shadow.bias=-0.0004;scene.add(key);
+    var fill=new THREE.DirectionalLight(0xaac4ff,0.55);fill.position.set(-5,3,-2);scene.add(fill);
+    var fr=new THREE.DirectionalLight(0xffffff,0.5);fr.position.set(0,1,9);scene.add(fr);
+
+    var floor=new THREE.Mesh(new THREE.PlaneGeometry(40,40),
+      new THREE.MeshStandardMaterial({color:0x16161e,roughness:0.95}));
+    floor.rotation.x=-Math.PI/2;floor.receiveShadow=true;scene.add(floor);
+    root=new THREE.Group();scene.add(root);
+    setupControls();
+  }
+  function clear(g){while(g.children.length){var c=g.children.pop();g.remove(c);if(c.geometry)c.geometry.dispose();if(c.material){if(Array.isArray(c.material))c.material.forEach(function(m){m.dispose();});else c.material.dispose();}}}
+
+  var aluMat=new THREE.MeshStandardMaterial({color:0xc8ccd2,roughness:0.35,metalness:0.75});
+  var bedMat=new THREE.MeshStandardMaterial({color:0xccd0d9,roughness:0.4,metalness:0.5,side:THREE.DoubleSide});
+  var wallMat=new THREE.MeshStandardMaterial({color:0xaeb2bd,roughness:0.45,metalness:0.45,side:THREE.DoubleSide});
+  var boxMat=new THREE.MeshStandardMaterial({color:0xf0d9a0,roughness:0.75,metalness:0.05});
+  var frontBoxMat=new THREE.MeshStandardMaterial({color:0xffc566,roughness:0.6,metalness:0.05});
+
+  var meta={};
+  function rebuild(){
+    clear(root); robot=null; robotHead=null;
+    var W=P.W,H=P.H,D=P.D, N_COL=P.COL;
+    var TOP=P.TOP,BOT=P.BOT,SIDE=P.SIDE,CUT=P.CUT;
+    var usableW=Math.max(0.1, W-2*SIDE);
+    var usableH=Math.max(0.1, H-TOP-BOT-CUT);
+    var colW=usableW/N_COL;
+    var chanLen=Math.max(0.1, D-0.10);
+    var tilt=P.tilt*Math.PI/180, sinT=Math.sin(tilt), cosT=Math.cos(tilt);
+    var chH=P.chH, chW=P.chW, medL=P.med;
+
+    var rise=chanLen*sinT;
+    var pitch=chH/cosT;
+    var nRow=Math.max(1, Math.floor((usableH-rise)/pitch));
+    var chanCount=Math.max(1, Math.floor(colW/chW));
+    var medPerChan=Math.max(1, Math.floor(chanLen/medL));
+    var totalChan=nRow*chanCount*N_COL;
+    var totalBox=totalChan*medPerChan;
+    meta={W:W,H:H,D:D,usableW:usableW,usableH:usableH,colW:colW,N_COL:N_COL,
+          TOP:TOP,BOT:BOT,chanLen:chanLen,tilt:tilt,sinT:sinT,cosT:cosT,
+          chH:chH,chW:chW,medL:medL,nRow:nRow,chanCount:chanCount,rise:rise,pitch:pitch,railY:[]};
+
+    var t=0.05;
+    function beam(w,h,d,x,y,z){var m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),aluMat);m.position.set(x,y,z);m.castShadow=true;root.add(m);}
+    var sxs=[-W/2,W/2], szs=[-D/2,D/2], sys=[-H/2,H/2];
+    for(var a=0;a<2;a++)for(var b=0;b<2;b++)beam(t,H,t,sxs[a],0,szs[b]);
+    for(var i=1;i<N_COL;i++){var xx=-usableW/2+i*colW;beam(t,H,t,xx,0,-D/2);beam(t,H,t,xx,0,D/2);}
+    for(var c=0;c<2;c++)for(var d=0;d<2;d++)beam(W,t,t,0,sys[c],szs[d]);
+    for(var e=0;e<2;e++)for(var f=0;f<2;f++)beam(t,t,D,sxs[f],sys[e],0);
+    var back=new THREE.Mesh(new THREE.BoxGeometry(W-0.05,H-0.05,0.012),
+      new THREE.MeshStandardMaterial({color:0x33444f,roughness:0.3,metalness:0.2,transparent:true,opacity:0.26}));
+    back.position.set(0,0,-D/2+0.02);root.add(back);
+
+    var yBase=-H/2+BOT;
+    var zFrontEnd=chanLen/2;
+    var bedLen=chanLen/cosT;
+    var railYs=[];
+
+    for(var col=0;col<N_COL;col++){
+      var cx=-usableW/2+col*colW+colW/2;
+      for(var r=0;r<nRow;r++){
+        var yFront=yBase+r*pitch;
+        if(yFront+rise>H/2-TOP-CUT) break;
+        var yMid=yFront+rise/2;
+        if(col===0) railYs.push(yFront);
+
+        var bed=new THREE.Mesh(new THREE.PlaneGeometry(colW-0.04,bedLen),bedMat);
+        bed.rotation.x=tilt; bed.position.set(cx,yMid,0);
+        bed.receiveShadow=true; bed.castShadow=true; root.add(bed);
+
+        if(P.wall){
+          for(var k=0;k<=chanCount;k++){
+            var wx=cx-(colW-0.06)/2+k*chW;
+            var wall=new THREE.Mesh(new THREE.BoxGeometry(0.005,chH,bedLen*0.98),wallMat);
+            wall.position.set(wx,yMid+chH/2*cosT,0); wall.rotation.x=tilt; root.add(wall);
+          }
+        }
+        if(P.box){
+          var bw=Math.min(chW-0.012,0.05);
+          for(var kk=0;kk<chanCount;kk++){
+            var wxc=cx-(colW-0.06)/2+kk*chW+chW/2;
+            for(var bb=0;bb<Math.min(medPerChan,12);bb++){
+              var s=medL*0.5+bb*medL;
+              if(s>chanLen-0.02) break;
+              var bx=new THREE.Mesh(new THREE.BoxGeometry(bw,bw,medL-0.012), bb===0?frontBoxMat:boxMat);
+              var z=zFrontEnd-s*cosT;
+              var y=yFront+s*sinT+bw/2*cosT;
+              bx.position.set(wxc,y,z); bx.rotation.x=tilt; bx.castShadow=true; root.add(bx);
+            }
+          }
+        }
+      }
+    }
+    meta.railY=railYs;
+
+    // konveyör
+    var conv=new THREE.Mesh(new THREE.BoxGeometry(W-0.1,0.04,D-0.3),
+      new THREE.MeshStandardMaterial({color:0x33333c,roughness:0.6,metalness:0.3}));
+    conv.position.set(0,-H/2+BOT*0.5,0.05);conv.receiveShadow=true;root.add(conv);
+
+    // robot: ön yüzeyde X-Y gezen köprü + kafa
+    var railTop=new THREE.Mesh(new THREE.BoxGeometry(usableW+0.2,0.04,0.04),aluMat);
+    railTop.position.set(0,H/2-TOP*0.5,D/2+0.05);root.add(railTop);
+    robot=new THREE.Group();
+    var bridge=new THREE.Mesh(new THREE.BoxGeometry(0.06,usableH+0.3,0.06),
+      new THREE.MeshStandardMaterial({color:0xe06a3a,roughness:0.4,metalness:0.4}));
+    bridge.position.z=D/2+0.085; bridge.castShadow=true; robot.add(bridge);
+    robotHead=new THREE.Mesh(new THREE.BoxGeometry(0.18,0.14,0.18),
+      new THREE.MeshStandardMaterial({color:0xf57a48,roughness:0.35,metalness:0.5}));
+    robotHead.position.set(0,0,D/2+0.10); robotHead.castShadow=true; robot.add(robotHead);
+    robot.position.x=-usableW*0.3;
+    root.add(robot);
+
+    // metrikler
+    document.getElementById('m-row').textContent=nRow;
+    document.getElementById('m-chan').textContent=chanCount;
+    document.getElementById('m-tot').textContent=totalChan.toLocaleString('tr-TR');
+    document.getElementById('m-box').textContent=totalBox.toLocaleString('tr-TR');
+    document.getElementById('dim-badge').textContent=W.toFixed(2)+'×'+H.toFixed(2)+'×'+D.toFixed(2)+' m';
+
+    // fizik notu
+    var note=document.getElementById('phys-note');
+    note.innerHTML='Eğimli kanal arka yükselişi: <b>'+(rise*100).toFixed(0)+' cm</b> · '+
+      'iç içe kat pitch: <b>'+(pitch*100).toFixed(1)+' cm</b> · '+
+      'kanal/kat: <b>'+chanCount+'</b> · ilaç/kanal: <b>'+medPerChan+'</b>. '+
+      'Kullanılabilir alan: '+(usableW*100).toFixed(0)+'×'+(usableH*100).toFixed(0)+' cm.';
+  }
+
+  // ---- kamera + dokunmatik ----
+  var theta=0.62,phi=1.18,rad=6.5,tx=0,ty=0;
+  function fitRad(){ rad=Math.max(P.W,P.H,P.D)*1.7; }
+  function applyCam(){
+    camera.position.set(rad*Math.sin(phi)*Math.sin(theta)+tx, rad*Math.cos(phi)+ty, rad*Math.sin(phi)*Math.cos(theta)+1.0);
+    camera.lookAt(tx,ty,0);
+  }
+  function setupControls(){
+    var el=renderer.domElement;
+    var drag=null,px=0,py=0;
+    el.addEventListener('mousedown',function(ev){drag=ev.button===2?'pan':'rot';px=ev.clientX;py=ev.clientY;});
+    window.addEventListener('mousemove',function(ev){if(!drag)return;var dx=ev.clientX-px,dy=ev.clientY-py;px=ev.clientX;py=ev.clientY;
+      if(drag==='rot'){theta-=dx*0.008;phi=Math.max(0.2,Math.min(2.7,phi-dy*0.008));}else{tx-=dx*0.006;ty+=dy*0.006;}applyCam();});
+    window.addEventListener('mouseup',function(){drag=null;});
+    el.addEventListener('contextmenu',function(ev){ev.preventDefault();});
+    el.addEventListener('wheel',function(ev){ev.preventDefault();rad=Math.max(1.5,Math.min(22,rad+ev.deltaY*0.004));applyCam();},{passive:false});
+
+    var t1=null,lastDist=null,lastMid=null;
+    el.addEventListener('touchstart',function(ev){ev.preventDefault();
+      if(ev.touches.length===1){t1={x:ev.touches[0].clientX,y:ev.touches[0].clientY};lastDist=null;}
+      else if(ev.touches.length===2){lastDist=tDist(ev);lastMid=tMid(ev);t1=null;}
+    },{passive:false});
+    el.addEventListener('touchmove',function(ev){ev.preventDefault();
+      if(ev.touches.length===1&&t1){var dx=ev.touches[0].clientX-t1.x,dy=ev.touches[0].clientY-t1.y;
+        t1={x:ev.touches[0].clientX,y:ev.touches[0].clientY};
+        theta-=dx*0.008;phi=Math.max(0.2,Math.min(2.7,phi-dy*0.008));applyCam();}
+      else if(ev.touches.length===2){var dd=tDist(ev),mid=tMid(ev);
+        if(lastDist){rad=Math.max(1.5,Math.min(22,rad*(lastDist/dd)));}
+        if(lastMid){tx-=(mid.x-lastMid.x)*0.012;ty+=(mid.y-lastMid.y)*0.012;}
+        lastDist=dd;lastMid=mid;applyCam();}
+    },{passive:false});
+    el.addEventListener('touchend',function(ev){
+      if(ev.touches.length===0){t1=null;lastDist=null;lastMid=null;}
+      else if(ev.touches.length===1){t1={x:ev.touches[0].clientX,y:ev.touches[0].clientY};lastDist=null;}
+    });
+    function tDist(ev){var a=ev.touches[0],b=ev.touches[1];return Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);}
+    function tMid(ev){var a=ev.touches[0],b=ev.touches[1];return {x:(a.clientX+b.clientX)/2,y:(a.clientY+b.clientY)/2};}
+  }
+
+  // ---- görünüm butonları ----
+  document.getElementById('btnSide').addEventListener('click',function(){theta=1.45;phi=Math.PI/2;fitRad();tx=0;ty=0;applyCam();});
+  document.getElementById('btnFront').addEventListener('click',function(){theta=0;phi=Math.PI/2;fitRad();tx=0;ty=0;applyCam();});
+  document.getElementById('btnReset').addEventListener('click',function(){theta=0.62;phi=1.18;fitRad();tx=0;ty=0;applyCam();});
+
+  // ---- robot animasyonu ----
+  var busy=false, fallBox=null;
+  function dispense(){
+    if(busy||!robot||!meta.railY.length) return; busy=true;
+    var W=meta.W,usableW=meta.usableW;
+    var c=Math.floor(Math.random()*meta.chanCount);
+    var tgtX=-usableW/2 + c*meta.colW/meta.chanCount + 0.05 - usableW*0; // kabaca kanal x
+    tgtX=-usableW/2 + (0.5+c)*(meta.colW/meta.chanCount);
+    var ri=Math.floor(Math.random()*meta.railY.length);
+    var tgtY=meta.railY[ri];
+    var s={x:robot.position.x,y:robotHead.position.y}, t0=performance.now();
+    (function mv(){var k=Math.min(1,(performance.now()-t0)/800);var ease=k<.5?2*k*k:1-Math.pow(-2*k+2,2)/2;
+      robot.position.x=s.x+(tgtX-s.x)*ease; robotHead.position.y=s.y+((tgtY)-s.y)*ease;
+      if(k<1)requestAnimationFrame(mv); else fall(tgtX,tgtY);})();
+  }
+  function fall(x,y){
+    var b=new THREE.Mesh(new THREE.BoxGeometry(0.05,0.05,0.09),
+      new THREE.MeshStandardMaterial({color:0xffd27f,emissive:0x402c00,emissiveIntensity:0.4,roughness:0.6}));
+    b.position.set(x, y, meta.D/2-0.1); b.castShadow=true; root.add(b);
+    var convY=-meta.H/2+meta.BOT*0.5+0.05, t0=performance.now(), sy=b.position.y;
+    (function fl(){var k=Math.min(1,(performance.now()-t0)/650);
+      b.position.y=sy+(convY-sy)*(k*k); b.rotation.x+=0.1;
+      if(k<1)requestAnimationFrame(fl); else flow(b);})();
+  }
+  function flow(b){var t0=performance.now(),sx=b.position.x,ex=meta.usableW/2+0.4;
+    (function fw(){var k=Math.min(1,(performance.now()-t0)/1000);
+      b.position.x=sx+(ex-sx)*k; b.rotation.x=0;
+      if(k<1)requestAnimationFrame(fw); else {root.remove(b);b.geometry.dispose();b.material.dispose();busy=false;}})();
+  }
+  document.getElementById('btnRun').addEventListener('click',dispense);
+
+  // ---- sekme geçişi ----
+  var tabs=document.querySelectorAll('.tab'), panels=document.querySelectorAll('.panel');
+  tabs.forEach(function(tb){tb.addEventListener('click',function(){
+    tabs.forEach(function(x){x.classList.remove('active');});
+    panels.forEach(function(x){x.classList.remove('active');});
+    tb.classList.add('active');
+    document.querySelector('.panel[data-panel="'+tb.dataset.tab+'"]').classList.add('active');
+  });});
+
+  // ---- slider bağları ----
+  function link(id,out,key,scale,fix){
+    var s=document.getElementById(id),o=document.getElementById(out);
+    s.addEventListener('input',function(){
+      var v=parseFloat(s.value); P[key]=scale?v/scale:v;
+      o.textContent=fix!=null?v.toFixed(fix):v;
+      rebuild();
+    });
+  }
+  link('pW','vW','W',null,2); link('pH','vH','H',null,2); link('pD','vD','D',null,2);
+  document.getElementById('pCol').addEventListener('input',function(){P.COL=parseInt(this.value);document.getElementById('vCol').textContent=this.value;rebuild();});
+  link('pTop','vTop','TOP',100,0); link('pBot','vBot','BOT',100,0); link('pSide','vSide','SIDE',100,0); link('pCut','vCut','CUT',100,0);
+  link('pTilt','vTilt','tilt',null,1); link('pChH','vChH','chH',100,1); link('pChW','vChW','chW',100,1); link('pMed','vMed','med',100,0);
+  document.getElementById('cBox').addEventListener('change',function(){P.box=this.checked;rebuild();});
+  document.getElementById('cWall').addEventListener('change',function(){P.wall=this.checked;rebuild();});
+
+  document.getElementById('btnPreset').addEventListener('click',function(){
+    P={W:4.0,H:2.5,D:1.25,COL:3,TOP:0.40,BOT:0.25,SIDE:0.15,CUT:0.05,tilt:27.5,chH:0.06,chW:0.05,med:0.10,box:true,wall:true};
+    // sliderları geri yükle
+    setVal('pW',4.0,'vW',2);setVal('pH',2.5,'vH',2);setVal('pD',1.25,'vD',2);
+    document.getElementById('pCol').value=3;document.getElementById('vCol').textContent='3';
+    setVal('pTop',40,'vTop',0);setVal('pBot',25,'vBot',0);setVal('pSide',15,'vSide',0);setVal('pCut',5,'vCut',0);
+    setVal('pTilt',27.5,'vTilt',1);setVal('pChH',6,'vChH',1);setVal('pChW',5,'vChW',1);setVal('pMed',10,'vMed',0);
+    document.getElementById('cBox').checked=true;document.getElementById('cWall').checked=true;
+    fitRad();theta=0.62;phi=1.18;tx=0;ty=0;applyCam();rebuild();
+  });
+  function setVal(id,v,out,fix){document.getElementById(id).value=v;document.getElementById(out).textContent=v.toFixed(fix);}
+
+  function loop(){requestAnimationFrame(loop);renderer.render(scene,camera);}
+  build(); fitRad(); rebuild(); applyCam(); loop();
+  window.addEventListener('resize',function(){var cw=wrap.clientWidth,ch=wrap.clientHeight;if(cw&&ch){camera.aspect=cw/ch;camera.updateProjectionMatrix();renderer.setSize(cw,ch);}});
+  }catch(err){fail(err.message);}
+})();
+</script>
+</body>
+</html>
