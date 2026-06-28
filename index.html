@@ -115,7 +115,8 @@
   <div class="panel" data-panel="pay">
     <div class="ctl"><label>Üst boşluk (cm)</label><input type="range" id="pTop" min="0" max="80" step="1" value="40"><span class="num" id="vTop">40</span></div>
     <div class="ctl"><label>Alt boşluk (cm)</label><input type="range" id="pBot" min="0" max="80" step="1" value="25"><span class="num" id="vBot">25</span></div>
-    <div class="ctl"><label>Yan boşluk (cm)</label><input type="range" id="pSide" min="0" max="40" step="1" value="15"><span class="num" id="vSide">15</span></div>
+    <div class="ctl"><label>Sol boşluk (cm)</label><input type="range" id="pSideL" min="0" max="40" step="1" value="15"><span class="num" id="vSideL">15</span></div>
+    <div class="ctl"><label>Sağ boşluk (cm)</label><input type="range" id="pSideR" min="0" max="40" step="1" value="15"><span class="num" id="vSideR">15</span></div>
     <div class="ctl"><label>Üst kesme (cm)</label><input type="range" id="pCut" min="0" max="20" step="1" value="5"><span class="num" id="vCut">5</span></div>
   </div>
 
@@ -147,7 +148,7 @@
   if(typeof THREE==='undefined'){fail('Three.js yüklenemedi.');return;}
 
   // ---- parametre durumu ----
-  var P={ W:4.0,H:2.5,D:1.25,COL:3, TOP:0.40,BOT:0.25,SIDE:0.15,CUT:0.05,
+  var P={ W:4.0,H:2.5,D:1.25,COL:3, TOP:0.40,BOT:0.25,SIDE_L:0.15,SIDE_R:0.15,CUT:0.05,
           tilt:27.5, chH:0.06, chW:0.05, med:0.10, box:true, wall:true };
 
   var scene,camera,renderer,root,robot,robotHead;
@@ -164,7 +165,7 @@
 
     scene.add(new THREE.HemisphereLight(0xdfe8ff,0x303038,1.0));
     var key=new THREE.DirectionalLight(0xffffff,1.2);key.position.set(4,7,6);key.castShadow=true;
-    key.shadow.mapSize.set(2048,2048);
+    key.shadow.mapSize.set(1024,1024);
     key.shadow.camera.left=-3.5;key.shadow.camera.right=3.5;key.shadow.camera.top=3.5;key.shadow.camera.bottom=-3.5;
     key.shadow.camera.near=1;key.shadow.camera.far=26;key.shadow.bias=-0.0004;scene.add(key);
     var fill=new THREE.DirectionalLight(0xaac4ff,0.55);fill.position.set(-5,3,-2);scene.add(fill);
@@ -188,8 +189,10 @@
   function rebuild(){
     clear(root); robot=null; robotHead=null;
     var W=P.W,H=P.H,D=P.D, N_COL=P.COL;
-    var TOP=P.TOP,BOT=P.BOT,SIDE=P.SIDE,CUT=P.CUT;
-    var usableW=Math.max(0.1, W-2*SIDE);
+    var TOP=P.TOP,BOT=P.BOT,SIDE_L=P.SIDE_L,SIDE_R=P.SIDE_R,CUT=P.CUT;
+    var usableW=Math.max(0.1, W-SIDE_L-SIDE_R);
+    var xL=-W/2+SIDE_L;          // kullanılabilir alanın sol kenarı
+    var xC=xL+usableW/2;         // kullanılabilir alanın merkezi (asimetrik olabilir)
     var usableH=Math.max(0.1, H-TOP-BOT-CUT);
     var colW=usableW/N_COL;
     var chanLen=Math.max(0.1, D-0.10);
@@ -203,7 +206,7 @@
     var medPerChan=Math.max(1, Math.floor(chanLen/medL));
     var totalChan=nRow*chanCount*N_COL;
     var totalBox=totalChan*medPerChan;
-    meta={W:W,H:H,D:D,usableW:usableW,usableH:usableH,colW:colW,N_COL:N_COL,
+    meta={W:W,H:H,D:D,usableW:usableW,usableH:usableH,xL:xL,xC:xC,colW:colW,N_COL:N_COL,
           TOP:TOP,BOT:BOT,chanLen:chanLen,tilt:tilt,sinT:sinT,cosT:cosT,
           chH:chH,chW:chW,medL:medL,nRow:nRow,chanCount:chanCount,rise:rise,pitch:pitch,railY:[]};
 
@@ -211,7 +214,7 @@
     function beam(w,h,d,x,y,z){var m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),aluMat);m.position.set(x,y,z);m.castShadow=true;root.add(m);}
     var sxs=[-W/2,W/2], szs=[-D/2,D/2], sys=[-H/2,H/2];
     for(var a=0;a<2;a++)for(var b=0;b<2;b++)beam(t,H,t,sxs[a],0,szs[b]);
-    for(var i=1;i<N_COL;i++){var xx=-usableW/2+i*colW;beam(t,H,t,xx,0,-D/2);beam(t,H,t,xx,0,D/2);}
+    for(var i=1;i<N_COL;i++){var xx=xL+i*colW;beam(t,H,t,xx,0,-D/2);beam(t,H,t,xx,0,D/2);}
     for(var c=0;c<2;c++)for(var d=0;d<2;d++)beam(W,t,t,0,sys[c],szs[d]);
     for(var e=0;e<2;e++)for(var f=0;f<2;f++)beam(t,t,D,sxs[f],sys[e],0);
     var back=new THREE.Mesh(new THREE.BoxGeometry(W-0.05,H-0.05,0.012),
@@ -224,7 +227,7 @@
     var railYs=[];
 
     for(var col=0;col<N_COL;col++){
-      var cx=-usableW/2+col*colW+colW/2;
+      var cx=xL+col*colW+colW/2;
       for(var r=0;r<nRow;r++){
         var yFront=yBase+r*pitch;
         if(yFront+rise>H/2-TOP-CUT) break;
@@ -233,7 +236,7 @@
 
         var bed=new THREE.Mesh(new THREE.PlaneGeometry(colW-0.04,bedLen),bedMat);
         bed.rotation.x=tilt; bed.position.set(cx,yMid,0);
-        bed.receiveShadow=true; bed.castShadow=true; root.add(bed);
+        bed.receiveShadow=true; root.add(bed);
 
         if(P.wall){
           for(var k=0;k<=chanCount;k++){
@@ -252,7 +255,7 @@
               var bx=new THREE.Mesh(new THREE.BoxGeometry(bw,bw,medL-0.012), bb===0?frontBoxMat:boxMat);
               var z=zFrontEnd-s*cosT;
               var y=yFront+s*sinT+bw/2*cosT;
-              bx.position.set(wxc,y,z); bx.rotation.x=tilt; bx.castShadow=true; root.add(bx);
+              bx.position.set(wxc,y,z); bx.rotation.x=tilt; root.add(bx);
             }
           }
         }
@@ -267,7 +270,7 @@
 
     // robot: ön yüzeyde X-Y gezen köprü + kafa
     var railTop=new THREE.Mesh(new THREE.BoxGeometry(usableW+0.2,0.04,0.04),aluMat);
-    railTop.position.set(0,H/2-TOP*0.5,D/2+0.05);root.add(railTop);
+    railTop.position.set(xC,H/2-TOP*0.5,D/2+0.05);root.add(railTop);
     robot=new THREE.Group();
     var bridge=new THREE.Mesh(new THREE.BoxGeometry(0.06,usableH+0.3,0.06),
       new THREE.MeshStandardMaterial({color:0xe06a3a,roughness:0.4,metalness:0.4}));
@@ -275,7 +278,7 @@
     robotHead=new THREE.Mesh(new THREE.BoxGeometry(0.18,0.14,0.18),
       new THREE.MeshStandardMaterial({color:0xf57a48,roughness:0.35,metalness:0.5}));
     robotHead.position.set(0,0,D/2+0.10); robotHead.castShadow=true; robot.add(robotHead);
-    robot.position.x=-usableW*0.3;
+    robot.position.x=xC-usableW*0.3;
     root.add(robot);
 
     // metrikler
@@ -291,14 +294,17 @@
       'iç içe kat pitch: <b>'+(pitch*100).toFixed(1)+' cm</b> · '+
       'kanal/kat: <b>'+chanCount+'</b> · ilaç/kanal: <b>'+medPerChan+'</b>. '+
       'Kullanılabilir alan: '+(usableW*100).toFixed(0)+'×'+(usableH*100).toFixed(0)+' cm.';
+    dirty=true;
   }
 
   // ---- kamera + dokunmatik ----
-  var theta=0.62,phi=1.18,rad=6.5,tx=0,ty=0;
+  var theta=0.62,phi=1.18,rad=6.5,tx=0,ty=0,dirty=true;
   function fitRad(){ rad=Math.max(P.W,P.H,P.D)*1.7; }
   function applyCam(){
+    var lim=Math.max(P.W,P.H)*0.55;            // pan'i sınırla — görünüm kaçmasın
+    tx=Math.max(-lim,Math.min(lim,tx)); ty=Math.max(-lim,Math.min(lim,ty));
     camera.position.set(rad*Math.sin(phi)*Math.sin(theta)+tx, rad*Math.cos(phi)+ty, rad*Math.sin(phi)*Math.cos(theta)+1.0);
-    camera.lookAt(tx,ty,0);
+    camera.lookAt(tx,ty,0); dirty=true;
   }
   function setupControls(){
     var el=renderer.domElement;
@@ -341,15 +347,13 @@
   var busy=false, fallBox=null;
   function dispense(){
     if(busy||!robot||!meta.railY.length) return; busy=true;
-    var W=meta.W,usableW=meta.usableW;
     var c=Math.floor(Math.random()*meta.chanCount);
-    var tgtX=-usableW/2 + c*meta.colW/meta.chanCount + 0.05 - usableW*0; // kabaca kanal x
-    tgtX=-usableW/2 + (0.5+c)*(meta.colW/meta.chanCount);
+    var tgtX=meta.xL + (0.5+c)*(meta.colW/meta.chanCount);  // kanalın gerçek x merkezi
     var ri=Math.floor(Math.random()*meta.railY.length);
     var tgtY=meta.railY[ri];
     var s={x:robot.position.x,y:robotHead.position.y}, t0=performance.now();
-    (function mv(){var k=Math.min(1,(performance.now()-t0)/800);var ease=k<.5?2*k*k:1-Math.pow(-2*k+2,2)/2;
-      robot.position.x=s.x+(tgtX-s.x)*ease; robotHead.position.y=s.y+((tgtY)-s.y)*ease;
+    (function mv(){var k=Math.min(1,(performance.now()-t0)/550);var ease=k<.5?2*k*k:1-Math.pow(-2*k+2,2)/2;
+      robot.position.x=s.x+(tgtX-s.x)*ease; robotHead.position.y=s.y+((tgtY)-s.y)*ease; dirty=true;
       if(k<1)requestAnimationFrame(mv); else fall(tgtX,tgtY);})();
   }
   function fall(x,y){
@@ -357,13 +361,13 @@
       new THREE.MeshStandardMaterial({color:0xffd27f,emissive:0x402c00,emissiveIntensity:0.4,roughness:0.6}));
     b.position.set(x, y, meta.D/2-0.1); b.castShadow=true; root.add(b);
     var convY=-meta.H/2+meta.BOT*0.5+0.05, t0=performance.now(), sy=b.position.y;
-    (function fl(){var k=Math.min(1,(performance.now()-t0)/650);
-      b.position.y=sy+(convY-sy)*(k*k); b.rotation.x+=0.1;
+    (function fl(){var k=Math.min(1,(performance.now()-t0)/450);
+      b.position.y=sy+(convY-sy)*(k*k); b.rotation.x+=0.1; dirty=true;
       if(k<1)requestAnimationFrame(fl); else flow(b);})();
   }
-  function flow(b){var t0=performance.now(),sx=b.position.x,ex=meta.usableW/2+0.4;
-    (function fw(){var k=Math.min(1,(performance.now()-t0)/1000);
-      b.position.x=sx+(ex-sx)*k; b.rotation.x=0;
+  function flow(b){var t0=performance.now(),sx=b.position.x,ex=meta.xC+meta.usableW/2+0.4;
+    (function fw(){var k=Math.min(1,(performance.now()-t0)/700);
+      b.position.x=sx+(ex-sx)*k; b.rotation.x=0; dirty=true;
       if(k<1)requestAnimationFrame(fw); else {root.remove(b);b.geometry.dispose();b.material.dispose();busy=false;}})();
   }
   document.getElementById('btnRun').addEventListener('click',dispense);
@@ -388,26 +392,26 @@
   }
   link('pW','vW','W',null,2); link('pH','vH','H',null,2); link('pD','vD','D',null,2);
   document.getElementById('pCol').addEventListener('input',function(){P.COL=parseInt(this.value);document.getElementById('vCol').textContent=this.value;rebuild();});
-  link('pTop','vTop','TOP',100,0); link('pBot','vBot','BOT',100,0); link('pSide','vSide','SIDE',100,0); link('pCut','vCut','CUT',100,0);
+  link('pTop','vTop','TOP',100,0); link('pBot','vBot','BOT',100,0); link('pSideL','vSideL','SIDE_L',100,0); link('pSideR','vSideR','SIDE_R',100,0); link('pCut','vCut','CUT',100,0);
   link('pTilt','vTilt','tilt',null,1); link('pChH','vChH','chH',100,1); link('pChW','vChW','chW',100,1); link('pMed','vMed','med',100,0);
   document.getElementById('cBox').addEventListener('change',function(){P.box=this.checked;rebuild();});
   document.getElementById('cWall').addEventListener('change',function(){P.wall=this.checked;rebuild();});
 
   document.getElementById('btnPreset').addEventListener('click',function(){
-    P={W:4.0,H:2.5,D:1.25,COL:3,TOP:0.40,BOT:0.25,SIDE:0.15,CUT:0.05,tilt:27.5,chH:0.06,chW:0.05,med:0.10,box:true,wall:true};
+    P={W:4.0,H:2.5,D:1.25,COL:3,TOP:0.40,BOT:0.25,SIDE_L:0.15,SIDE_R:0.15,CUT:0.05,tilt:27.5,chH:0.06,chW:0.05,med:0.10,box:true,wall:true};
     // sliderları geri yükle
     setVal('pW',4.0,'vW',2);setVal('pH',2.5,'vH',2);setVal('pD',1.25,'vD',2);
     document.getElementById('pCol').value=3;document.getElementById('vCol').textContent='3';
-    setVal('pTop',40,'vTop',0);setVal('pBot',25,'vBot',0);setVal('pSide',15,'vSide',0);setVal('pCut',5,'vCut',0);
+    setVal('pTop',40,'vTop',0);setVal('pBot',25,'vBot',0);setVal('pSideL',15,'vSideL',0);setVal('pSideR',15,'vSideR',0);setVal('pCut',5,'vCut',0);
     setVal('pTilt',27.5,'vTilt',1);setVal('pChH',6,'vChH',1);setVal('pChW',5,'vChW',1);setVal('pMed',10,'vMed',0);
     document.getElementById('cBox').checked=true;document.getElementById('cWall').checked=true;
     fitRad();theta=0.62;phi=1.18;tx=0;ty=0;applyCam();rebuild();
   });
   function setVal(id,v,out,fix){document.getElementById(id).value=v;document.getElementById(out).textContent=v.toFixed(fix);}
 
-  function loop(){requestAnimationFrame(loop);renderer.render(scene,camera);}
+  function loop(){requestAnimationFrame(loop); if(dirty){renderer.render(scene,camera); dirty=false;}}
   build(); fitRad(); rebuild(); applyCam(); loop();
-  window.addEventListener('resize',function(){var cw=wrap.clientWidth,ch=wrap.clientHeight;if(cw&&ch){camera.aspect=cw/ch;camera.updateProjectionMatrix();renderer.setSize(cw,ch);}});
+  window.addEventListener('resize',function(){var cw=wrap.clientWidth,ch=wrap.clientHeight;if(cw&&ch){camera.aspect=cw/ch;camera.updateProjectionMatrix();renderer.setSize(cw,ch);dirty=true;}});
   }catch(err){fail(err.message);}
 })();
 </script>
