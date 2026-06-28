@@ -324,22 +324,22 @@
 
     // --- formül + canlı değer dökümü (hepsi cm) ---
     var deg=P.tilt.toFixed(1);
-    function f(x,d){return x.toFixed(d==null?1:d);}
+    function fmt(x,d){return x.toFixed(d==null?1:d);}
     var rows=[
-      ['Kullanılabilir genişlik','usableW = W − solB − sağB = '+f(W*100)+' − '+f(SIDE_L*100)+' − '+f(SIDE_R*100), f(usableW*100)+' cm'],
-      ['Kullanılabilir yükseklik','usableH = H − üst − alt − kesme = '+f(H*100)+' − '+f(TOP*100)+' − '+f(BOT*100)+' − '+f(CUT*100), f(usableH*100)+' cm'],
-      ['Kolon genişliği','colW = usableW / kolon = '+f(usableW*100)+' / '+N_COL, f(colW*100)+' cm'],
-      ['Kolon iç genişliği','innerColW = (usableW − (kolon−1)·t) / kolon = ('+f(usableW*100)+' − '+(N_COL-1)+'·'+f(t*100)+') / '+N_COL, f(innerColW*100)+' cm'],
-      ['Kanal uzunluğu','chanLen = D − 10 (ön/arka pay) = '+f(D*100)+' − 10', f(chanLen*100)+' cm'],
-      ['Arka yükseliş','rise = chanLen · sin('+deg+'°) = '+f(chanLen*100)+' · '+f(sinT,3), f(rise*100)+' cm'],
-      ['Kat aralığı','pitch = (kanalYük + sac) / cos('+deg+'°) = ('+f(chH*100)+' + '+f(tSac*100)+') / '+f(cosT,3), f(pitch*100)+' cm'],
-      ['Kat sayısı','nRow = ⌊(usableH − rise) / pitch⌋ + 1 = ⌊('+f(usableH*100)+' − '+f(rise*100)+') / '+f(pitch*100)+'⌋ + 1', String(nRow)],
-      ['Kanal / kat','chanCount = ⌊(innerColW − sac) / (kanalEni + sac)⌋ = ⌊('+f(innerColW*100)+' − '+f(tSac*100)+') / ('+f(chW*100)+' + '+f(tSac*100)+')⌋', String(chanCount)],
-      ['İlaç / kanal','medPerChan = ⌊chanLen / ilaçBoyu⌋ = ⌊'+f(chanLen*100)+' / '+f(medL*100)+'⌋', String(medPerChan)],
+      ['Kullanılabilir genişlik','usableW = W − solB − sağB = '+fmt(W*100)+' − '+fmt(SIDE_L*100)+' − '+fmt(SIDE_R*100), fmt(usableW*100)+' cm'],
+      ['Kullanılabilir yükseklik','usableH = H − üst − alt − kesme = '+fmt(H*100)+' − '+fmt(TOP*100)+' − '+fmt(BOT*100)+' − '+fmt(CUT*100), fmt(usableH*100)+' cm'],
+      ['Kolon genişliği','colW = usableW / kolon = '+fmt(usableW*100)+' / '+N_COL, fmt(colW*100)+' cm'],
+      ['Kolon iç genişliği','innerColW = (usableW − (kolon−1)·t) / kolon = ('+fmt(usableW*100)+' − '+(N_COL-1)+'·'+fmt(t*100)+') / '+N_COL, fmt(innerColW*100)+' cm'],
+      ['Kanal uzunluğu','chanLen = D − 10 (ön/arka pay) = '+fmt(D*100)+' − 10', fmt(chanLen*100)+' cm'],
+      ['Arka yükseliş','rise = chanLen · sin('+deg+'°) = '+fmt(chanLen*100)+' · '+fmt(sinT,3), fmt(rise*100)+' cm'],
+      ['Kat aralığı','pitch = (kanalYük + sac) / cos('+deg+'°) = ('+fmt(chH*100)+' + '+fmt(tSac*100)+') / '+fmt(cosT,3), fmt(pitch*100)+' cm'],
+      ['Kat sayısı','nRow = ⌊(usableH − rise) / pitch⌋ + 1 = ⌊('+fmt(usableH*100)+' − '+fmt(rise*100)+') / '+fmt(pitch*100)+'⌋ + 1', String(nRow)],
+      ['Kanal / kat','chanCount = ⌊(innerColW − sac) / (kanalEni + sac)⌋ = ⌊('+fmt(innerColW*100)+' − '+fmt(tSac*100)+') / ('+fmt(chW*100)+' + '+fmt(tSac*100)+')⌋', String(chanCount)],
+      ['İlaç / kanal','medPerChan = ⌊chanLen / ilaçBoyu⌋ = ⌊'+fmt(chanLen*100)+' / '+fmt(medL*100)+'⌋', String(medPerChan)],
       ['Toplam kanal','toplamKanal = nRow · chanCount · kolon = '+nRow+' · '+chanCount+' · '+N_COL, totalChan.toLocaleString('tr-TR')],
       ['Toplam ilaç','toplamİlaç = toplamKanal · ilaç/kanal = '+totalChan.toLocaleString('tr-TR')+' · '+medPerChan, totalBox.toLocaleString('tr-TR')]
     ];
-    var html='<h3>Hesaplama — gerçek ölçü (dikme t = '+f(t*100)+' cm · sac = '+f(tSac*100)+' cm)</h3>';
+    var html='<h3>Hesaplama — gerçek ölçü (dikme t = '+fmt(t*100)+' cm · sac = '+fmt(tSac*100)+' cm)</h3>';
     for(var ri2=0;ri2<rows.length;ri2++){
       html+='<div class="crow"><span class="lhs"><b>'+rows[ri2][0]+'</b><code>'+rows[ri2][1]+'</code></span>'+
             '<span class="res">'+rows[ri2][2]+'</span></div>';
