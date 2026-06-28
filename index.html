@@ -70,7 +70,19 @@
   .actions button.sec{background:var(--surface3); color:var(--text);}
   .actions button:active{opacity:.8;}
 
-  .note{font-size:11.5px; color:var(--muted); padding:0 14px 18px; line-height:1.5;}
+  .note{font-size:11.5px; color:var(--muted); padding:0 14px 12px; line-height:1.5;}
+
+  /* hesaplama / formül kutusu */
+  .calc{margin:0 12px 18px; background:var(--surface); border:1px solid var(--border);
+    border-radius:11px; padding:12px 14px;}
+  .calc h3{font-size:12.5px; color:var(--text); margin:0 0 9px; font-weight:600;}
+  .calc .crow{display:flex; justify-content:space-between; align-items:baseline; gap:12px;
+    padding:5px 0; border-bottom:1px dashed var(--border); font-size:11.5px;}
+  .calc .crow:last-child{border-bottom:none;}
+  .calc .crow .lhs{color:var(--text2); min-width:0;}
+  .calc .crow .lhs b{color:var(--text); font-weight:600; margin-right:6px;}
+  .calc code{font-family:ui-monospace,Menlo,Consolas,monospace; color:var(--muted);}
+  .calc .res{color:var(--green); font-weight:600; white-space:nowrap; flex:0 0 auto;}
 </style>
 </head>
 <body>
@@ -126,6 +138,7 @@
     <div class="ctl"><label>Kanal iç yük. (cm)</label><input type="range" id="pChH" min="3" max="14" step="0.5" value="6"><span class="num" id="vChH">6</span></div>
     <div class="ctl"><label>Kanal eni (cm)</label><input type="range" id="pChW" min="3" max="12" step="0.5" value="5"><span class="num" id="vChW">5</span></div>
     <div class="ctl"><label>İlaç boyu (cm)</label><input type="range" id="pMed" min="4" max="20" step="1" value="10"><span class="num" id="vMed">10</span></div>
+    <div class="ctl"><label>Sac kalınlığı (mm)</label><input type="range" id="pSac" min="0.5" max="3" step="0.1" value="1"><span class="num" id="vSac">1.0</span></div>
     <div class="toggles">
       <label class="chk"><input type="checkbox" id="cBox" checked> İlaçları göster</label>
       <label class="chk"><input type="checkbox" id="cWall" checked> Kanal ayraçları</label>
@@ -138,6 +151,7 @@
   </div>
 
   <div class="note" id="phys-note"></div>
+  <div class="calc" id="calc"></div>
 </div>
 
 <script src="three.min.js"></script>
@@ -149,7 +163,7 @@
 
   // ---- parametre durumu ----
   var P={ W:4.0,H:2.5,D:1.25,COL:3, TOP:0.40,BOT:0.25,SIDE_L:0.15,SIDE_R:0.15,CUT:0.05,
-          tilt:27.5, chH:0.06, chW:0.05, med:0.10, box:true, wall:true };
+          tilt:27.5, chH:0.06, chW:0.05, med:0.10, sac:0.001, box:true, wall:true };
 
   var scene,camera,renderer,root,robot,robotHead;
   var wrap=document.getElementById('wrap');
@@ -198,19 +212,24 @@
     var chanLen=Math.max(0.1, D-0.10);
     var tilt=P.tilt*Math.PI/180, sinT=Math.sin(tilt), cosT=Math.cos(tilt);
     var chH=P.chH, chW=P.chW, medL=P.med;
+    var t=0.05;                                    // dikme/profil sac kalınlığı (alüminyum) [m]
+    var tSac=P.sac;                                // kanal sacı (yatak + ayraç) kalınlığı [m]
+    var innerColW=Math.max(0.02, (usableW-(N_COL-1)*t)/N_COL);  // kolon iç net genişliği (N_COL-1 dikme payı)
+    var chanPitch=chW+tSac;                        // bir kanal = iç genişlik + bir ayraç sacı
 
-    var rise=chanLen*sinT;
-    var pitch=chH/cosT;
-    var nRow=Math.max(1, Math.floor((usableH-rise)/pitch));
-    var chanCount=Math.max(1, Math.floor(colW/chW));
-    var medPerChan=Math.max(1, Math.floor(chanLen/medL));
+    // --- gerçek malzeme kalınlığıyla kapasite ---
+    var rise=chanLen*sinT;                         // eğimli kanalın arka yükselişi
+    var pitch=(chH+tSac)/cosT;                     // yatak sacı dahil dikey kat aralığı
+    var nRow=Math.max(0, Math.floor((usableH-rise)/pitch)+1);          // kat: en üst kanalın arkası tavana değene kadar
+    var chanCount=Math.max(0, Math.floor((innerColW-tSac)/chanPitch)); // kat başına kanal (ayraçlar dahil)
+    var medPerChan=Math.max(0, Math.floor(chanLen/medL));              // kanal başına ilaç
     var totalChan=nRow*chanCount*N_COL;
     var totalBox=totalChan*medPerChan;
     meta={W:W,H:H,D:D,usableW:usableW,usableH:usableH,xL:xL,xC:xC,colW:colW,N_COL:N_COL,
-          TOP:TOP,BOT:BOT,chanLen:chanLen,tilt:tilt,sinT:sinT,cosT:cosT,
+          TOP:TOP,BOT:BOT,chanLen:chanLen,tilt:tilt,sinT:sinT,cosT:cosT,tSac:tSac,
+          innerColW:innerColW,chanPitch:chanPitch,
           chH:chH,chW:chW,medL:medL,nRow:nRow,chanCount:chanCount,rise:rise,pitch:pitch,railY:[]};
 
-    var t=0.05;
     function beam(w,h,d,x,y,z){var m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),aluMat);m.position.set(x,y,z);m.castShadow=true;root.add(m);}
     var sxs=[-W/2,W/2], szs=[-D/2,D/2], sys=[-H/2,H/2];
     for(var a=0;a<2;a++)for(var b=0;b<2;b++)beam(t,H,t,sxs[a],0,szs[b]);
@@ -234,21 +253,23 @@
         var yMid=yFront+rise/2;
         if(col===0) railYs.push(yFront);
 
-        var bed=new THREE.Mesh(new THREE.PlaneGeometry(colW-0.04,bedLen),bedMat);
+        // yatak sacı (gerçek kalınlıkta ince levha)
+        var bed=new THREE.Mesh(new THREE.BoxGeometry(innerColW,tSac,bedLen),bedMat);
         bed.rotation.x=tilt; bed.position.set(cx,yMid,0);
         bed.receiveShadow=true; root.add(bed);
 
+        var lE=cx-innerColW/2;                 // kolon iç sol kenar
         if(P.wall){
           for(var k=0;k<=chanCount;k++){
-            var wx=cx-(colW-0.06)/2+k*chW;
-            var wall=new THREE.Mesh(new THREE.BoxGeometry(0.005,chH,bedLen*0.98),wallMat);
+            var wx=lE+tSac/2+k*chanPitch;       // ayraç sacı merkezi (kalınlık dahil)
+            var wall=new THREE.Mesh(new THREE.BoxGeometry(tSac,chH,bedLen*0.98),wallMat);
             wall.position.set(wx,yMid+chH/2*cosT,0); wall.rotation.x=tilt; root.add(wall);
           }
         }
         if(P.box){
-          var bw=Math.min(chW-0.012,0.05);
+          var bw=Math.min(chW-0.006,chH-0.006,0.06);
           for(var kk=0;kk<chanCount;kk++){
-            var wxc=cx-(colW-0.06)/2+kk*chW+chW/2;
+            var wxc=lE+tSac+chW/2+kk*chanPitch; // kanal iç merkezi
             for(var bb=0;bb<Math.min(medPerChan,12);bb++){
               var s=medL*0.5+bb*medL;
               if(s>chanLen-0.02) break;
@@ -288,12 +309,42 @@
     document.getElementById('m-box').textContent=totalBox.toLocaleString('tr-TR');
     document.getElementById('dim-badge').textContent=W.toFixed(2)+'×'+H.toFixed(2)+'×'+D.toFixed(2)+' m';
 
-    // fizik notu
+    // fizik notu + gerçek malzeme hesabı
+    var bedArea=nRow*N_COL*innerColW*bedLen;                       // yatak sacı alanı [m²]
+    var wallArea=(chanCount+1)*nRow*N_COL*chH*(bedLen*0.98);       // ayraç sacı alanı [m²]
+    var sheetArea=bedArea+wallArea;
+    var sacMM=(tSac*1000).toFixed(1);
     var note=document.getElementById('phys-note');
     note.innerHTML='Eğimli kanal arka yükselişi: <b>'+(rise*100).toFixed(0)+' cm</b> · '+
-      'iç içe kat pitch: <b>'+(pitch*100).toFixed(1)+' cm</b> · '+
+      'kat aralığı (yatak sacı dahil): <b>'+(pitch*100).toFixed(1)+' cm</b> · '+
       'kanal/kat: <b>'+chanCount+'</b> · ilaç/kanal: <b>'+medPerChan+'</b>. '+
+      'Sac kalınlığı: <b>'+sacMM+' mm</b> · ayraç/kat: <b>'+(chanCount+1)+'</b> · '+
+      'toplam sac (yatak+ayraç): <b>'+sheetArea.toFixed(1)+' m²</b>. '+
       'Kullanılabilir alan: '+(usableW*100).toFixed(0)+'×'+(usableH*100).toFixed(0)+' cm.';
+
+    // --- formül + canlı değer dökümü (hepsi cm) ---
+    var deg=P.tilt.toFixed(1);
+    function f(x,d){return x.toFixed(d==null?1:d);}
+    var rows=[
+      ['Kullanılabilir genişlik','usableW = W − solB − sağB = '+f(W*100)+' − '+f(SIDE_L*100)+' − '+f(SIDE_R*100), f(usableW*100)+' cm'],
+      ['Kullanılabilir yükseklik','usableH = H − üst − alt − kesme = '+f(H*100)+' − '+f(TOP*100)+' − '+f(BOT*100)+' − '+f(CUT*100), f(usableH*100)+' cm'],
+      ['Kolon genişliği','colW = usableW / kolon = '+f(usableW*100)+' / '+N_COL, f(colW*100)+' cm'],
+      ['Kolon iç genişliği','innerColW = (usableW − (kolon−1)·t) / kolon = ('+f(usableW*100)+' − '+(N_COL-1)+'·'+f(t*100)+') / '+N_COL, f(innerColW*100)+' cm'],
+      ['Kanal uzunluğu','chanLen = D − 10 (ön/arka pay) = '+f(D*100)+' − 10', f(chanLen*100)+' cm'],
+      ['Arka yükseliş','rise = chanLen · sin('+deg+'°) = '+f(chanLen*100)+' · '+f(sinT,3), f(rise*100)+' cm'],
+      ['Kat aralığı','pitch = (kanalYük + sac) / cos('+deg+'°) = ('+f(chH*100)+' + '+f(tSac*100)+') / '+f(cosT,3), f(pitch*100)+' cm'],
+      ['Kat sayısı','nRow = ⌊(usableH − rise) / pitch⌋ + 1 = ⌊('+f(usableH*100)+' − '+f(rise*100)+') / '+f(pitch*100)+'⌋ + 1', String(nRow)],
+      ['Kanal / kat','chanCount = ⌊(innerColW − sac) / (kanalEni + sac)⌋ = ⌊('+f(innerColW*100)+' − '+f(tSac*100)+') / ('+f(chW*100)+' + '+f(tSac*100)+')⌋', String(chanCount)],
+      ['İlaç / kanal','medPerChan = ⌊chanLen / ilaçBoyu⌋ = ⌊'+f(chanLen*100)+' / '+f(medL*100)+'⌋', String(medPerChan)],
+      ['Toplam kanal','toplamKanal = nRow · chanCount · kolon = '+nRow+' · '+chanCount+' · '+N_COL, totalChan.toLocaleString('tr-TR')],
+      ['Toplam ilaç','toplamİlaç = toplamKanal · ilaç/kanal = '+totalChan.toLocaleString('tr-TR')+' · '+medPerChan, totalBox.toLocaleString('tr-TR')]
+    ];
+    var html='<h3>Hesaplama — gerçek ölçü (dikme t = '+f(t*100)+' cm · sac = '+f(tSac*100)+' cm)</h3>';
+    for(var ri2=0;ri2<rows.length;ri2++){
+      html+='<div class="crow"><span class="lhs"><b>'+rows[ri2][0]+'</b><code>'+rows[ri2][1]+'</code></span>'+
+            '<span class="res">'+rows[ri2][2]+'</span></div>';
+    }
+    document.getElementById('calc').innerHTML=html;
     dirty=true;
   }
 
@@ -348,7 +399,8 @@
   function dispense(){
     if(busy||!robot||!meta.railY.length) return; busy=true;
     var c=Math.floor(Math.random()*meta.chanCount);
-    var tgtX=meta.xL + (0.5+c)*(meta.colW/meta.chanCount);  // kanalın gerçek x merkezi
+    var cx0=meta.xL+meta.colW/2, lE0=cx0-meta.innerColW/2;
+    var tgtX=lE0+meta.tSac+meta.chW/2+c*meta.chanPitch;     // gerçek kanal x merkezi
     var ri=Math.floor(Math.random()*meta.railY.length);
     var tgtY=meta.railY[ri];
     var s={x:robot.position.x,y:robotHead.position.y}, t0=performance.now();
@@ -393,17 +445,17 @@
   link('pW','vW','W',null,2); link('pH','vH','H',null,2); link('pD','vD','D',null,2);
   document.getElementById('pCol').addEventListener('input',function(){P.COL=parseInt(this.value);document.getElementById('vCol').textContent=this.value;rebuild();});
   link('pTop','vTop','TOP',100,0); link('pBot','vBot','BOT',100,0); link('pSideL','vSideL','SIDE_L',100,0); link('pSideR','vSideR','SIDE_R',100,0); link('pCut','vCut','CUT',100,0);
-  link('pTilt','vTilt','tilt',null,1); link('pChH','vChH','chH',100,1); link('pChW','vChW','chW',100,1); link('pMed','vMed','med',100,0);
+  link('pTilt','vTilt','tilt',null,1); link('pChH','vChH','chH',100,1); link('pChW','vChW','chW',100,1); link('pMed','vMed','med',100,0); link('pSac','vSac','sac',1000,1);
   document.getElementById('cBox').addEventListener('change',function(){P.box=this.checked;rebuild();});
   document.getElementById('cWall').addEventListener('change',function(){P.wall=this.checked;rebuild();});
 
   document.getElementById('btnPreset').addEventListener('click',function(){
-    P={W:4.0,H:2.5,D:1.25,COL:3,TOP:0.40,BOT:0.25,SIDE_L:0.15,SIDE_R:0.15,CUT:0.05,tilt:27.5,chH:0.06,chW:0.05,med:0.10,box:true,wall:true};
+    P={W:4.0,H:2.5,D:1.25,COL:3,TOP:0.40,BOT:0.25,SIDE_L:0.15,SIDE_R:0.15,CUT:0.05,tilt:27.5,chH:0.06,chW:0.05,med:0.10,sac:0.001,box:true,wall:true};
     // sliderları geri yükle
     setVal('pW',4.0,'vW',2);setVal('pH',2.5,'vH',2);setVal('pD',1.25,'vD',2);
     document.getElementById('pCol').value=3;document.getElementById('vCol').textContent='3';
     setVal('pTop',40,'vTop',0);setVal('pBot',25,'vBot',0);setVal('pSideL',15,'vSideL',0);setVal('pSideR',15,'vSideR',0);setVal('pCut',5,'vCut',0);
-    setVal('pTilt',27.5,'vTilt',1);setVal('pChH',6,'vChH',1);setVal('pChW',5,'vChW',1);setVal('pMed',10,'vMed',0);
+    setVal('pTilt',27.5,'vTilt',1);setVal('pChH',6,'vChH',1);setVal('pChW',5,'vChW',1);setVal('pMed',10,'vMed',0);setVal('pSac',1,'vSac',1);
     document.getElementById('cBox').checked=true;document.getElementById('cWall').checked=true;
     fitRad();theta=0.62;phi=1.18;tx=0;ty=0;applyCam();rebuild();
   });
